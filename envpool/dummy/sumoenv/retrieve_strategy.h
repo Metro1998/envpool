@@ -104,7 +104,7 @@ class RewardStrategy : public RetrieveStrategy {
     std::any Retrieve() override {
       // Rewrite the Retrieve method to implement your own reward design or state representation.
       // Here we use 'hide' ranther than 'override' from virtual function to support decltype(auto) return type.
-      vector<int> reward;
+      vector<float> reward;
 
       for (const string& tl_id : tl_ids_) {
         int vehicles_for_tl = 0;

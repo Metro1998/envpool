@@ -54,28 +54,21 @@ class SumoClient {
             SetStrategies();
         }
 
-    void SetSimulation(int seed) {
-        sumo_cmd_ = {
-            path_to_sumo_,
-            string("-n"),
-            net_,
-            string("-r"),
-            route_,
-            string("-a"),
-            addition_,
-            string("--max-depart-delay"),
-            kMaxDepartDelay,
-            string("--waiting-time-memory"),
-            kWaitingTimeMemory,
-            string("--time-to-teleport"),
-            kTimeToTeleport,
-            string("--no-warnings"),
-            kNoWarnings,
-            string("--seed"),
-            std::to_string(seed)
-        };
-        Simulation::start(sumo_cmd_);
-    }
+void SetSimulation(int seed) {
+    Simulation::close();
+    sumo_cmd_ = {
+        path_to_sumo_,
+        string("-n"), net_,
+        string("-r"), route_,
+        string("-a"), addition_,
+        string("--max-depart-delay"), kMaxDepartDelay,
+        string("--waiting-time-memory"), kWaitingTimeMemory,
+        string("--time-to-teleport"), kTimeToTeleport,
+        string("--no-warnings"), kNoWarnings,
+        string("--seed"), std::to_string(seed)
+    };
+    Simulation::start(sumo_cmd_);
+}
 
 
     void close() {
@@ -99,7 +92,7 @@ class SumoClient {
     }
 
     decltype(auto) RetrieveReward() {
-        return std::any_cast<vector<int>>(reward_strategy_->Retrieve());
+        return std::any_cast<vector<float>>(reward_strategy_->Retrieve());
     }
 
 };

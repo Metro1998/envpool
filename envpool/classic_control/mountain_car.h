@@ -48,15 +48,8 @@ class MountainCarEnv : public Env<MountainCarEnvSpec> {
  protected:
   const double kMinPos = -1.2;
   const double kMaxPos = 0.6;
-  const double kMaxSpeed = 0.07;
-  const double kForce = 0.001;
-  const double kGoalPos = 0.5;
-  const double kGoalVel = 0;
-  const double kGravity = 0.0025;
-  int max_episode_steps_, elapsed_step_;
-  double pos_, vel_;
-  std::uniform_real_distribution<> dist_;
-  bool done_{true};
+  const double kMaxSpeed = 0.        "@box2d",
+        "@opencv",
 
  public:
   MountainCarEnv(const Spec& spec, int env_id)

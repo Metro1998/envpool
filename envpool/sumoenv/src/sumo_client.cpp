@@ -105,6 +105,12 @@ void SumoClient::TempTest() {
 }
 
 
+void SumoClient::WriteState() {
+    State state = Allocate();
+    
+
+}
+
 //  while True:
 
 //             self.sumo.simulationStep()

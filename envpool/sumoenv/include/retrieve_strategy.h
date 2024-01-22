@@ -18,17 +18,14 @@ using string = std::string;
 template <typename T>
 using vector = std::vector<T>;
 using ContainerVariant = std::variant<
-    vector<vector<int>>,
-    vector<vector<double>>,
-    vector<vector<vector<double>>>,
     vector<int>,
-    vector<std::pair<float, float>>
+    vector<float>
 >;
 
 class RetrieveStrategy {
   public:
     RetrieveStrategy();
-    virtual void Retrieve(std::unordered_map<string, ContainerVariant>& context) = 0;
+    virtual void Retrieve(std::unordered_map<string, ContainerVariant>& context, size_t max_num_player, size_t state_dim) = 0;
     virtual ~RetrieveStrategy();
 
   protected:
@@ -43,7 +40,7 @@ class RetrieveStrategy {
 class RetrieveStrategyImp : public RetrieveStrategy {
   public:
     RetrieveStrategyImp() = default;
-    void Retrieve(std::unordered_map<string, ContainerVariant>& context) override;
+    void Retrieve(std::unordered_map<string, ContainerVariant>& context, size_t max_num_players, size_t state_dim) override;
 };
 
 // class RewardStrategy : public RetrieveStrategy {

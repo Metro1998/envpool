@@ -53,7 +53,7 @@ void SumoClient::SetStrategies() {
 }
 
 const std::unordered_map<string, ContainerVariant>& SumoClient::Retrieve() {
-    retrieve_strategy_imp_->Retrieve(this->context_);
+    retrieve_strategy_imp_->Retrieve(this->context_, static_cast<size_t>(max_num_players_), static_cast<size_t>(state_dim_));
     return context_;
 }
 

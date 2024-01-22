@@ -51,14 +51,14 @@ void RetrieveStrategy::RemoveElements(vector<string>& lanes) {
 }
 
 
-void RetrieveStrategyImp::Retrieve(std::unordered_map<string, ContainerVariant>& context) {
-    vector<int> trafficlight_queue_lengths(tl_ids_.size());
-    vector<vector<double>> lane_lengths(tl_ids_.size());
-    vector<vector<int>> lane_queue_lengths(tl_ids_.size());
-    vector<vector<double>> lane_max_speeds(tl_ids_.size());
-    vector<vector<vector<double>>> vehicle_speeds(tl_ids_.size());
-    vector<vector<vector<double>>> vehicle_positions(tl_ids_.size());
-    vector<vector<vector<double>>> vehicle_acceleratoins(tl_ids_.size());
+void RetrieveStrategyImp::Retrieve(std::unordered_map<string, ContainerVariant>& context, size_t max_num_players, size_t state_dim) {
+    vector<int> trafficlight_queue_lengths(max_num_players);
+    vector<float> lane_lengths(max_num_players * state_dim);
+    vector<int> lane_queue_lengths(max_num_players * state_dim);
+    vector<double> lane_max_speeds(max_num_players * state_dim);
+    // vector<vector<vector<double>>> vehicle_speeds(tl_ids_.size()); temporarily unavailable
+    // vector<vector<vector<double>>> vehicle_positions(tl_ids_.size()); temporarily unavailable
+    // vector<vector<vector<double>>> vehicle_acceleratoins(tl_ids_.size()); temporarily unavailable
 
     int tl_index = 0;
     for (const string& tl_id : tl_ids_) {

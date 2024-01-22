@@ -17,11 +17,11 @@ SumoClient::SumoClient(
     const int random_seed,
     const double end_time
 ) : path_to_sumo_(path_to_sumo),
-    net_(net),
-    route_(route),
-    addition_(addition),
+    net_file_(net),
+    route_file_(route),
+    additional_file_(addition),
     yellow_time_(yellow_time),
-    random_seed_(random_seed),
+    seed_(random_seed),
     end_time_(end_time),
     sumo_cmd_({
         path_to_sumo,

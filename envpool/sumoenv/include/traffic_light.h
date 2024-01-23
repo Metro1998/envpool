@@ -13,6 +13,7 @@ public:
   ~TrafficLightImp();
 
   int Check();
+  int RetrieveLeftTime() const;
   inline void Pop()
   {
     schedule_.pop_front();

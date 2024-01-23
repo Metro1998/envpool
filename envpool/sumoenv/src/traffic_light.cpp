@@ -56,3 +56,11 @@ void TrafficLightImp::SetStageDuration(int stage, int duration) {
     schedule_.push_back(duration);
 }
 
+int TrafficLightImp::RetrieveLeftTime() const {
+    if (!schedule_.empty() && schedule_.back() == -1) {
+        return schedule_.size();
+    } else {
+        return schedule_.empty() ? 0 : schedule_.size() - 1 + schedule_.back();
+    }
+}
+

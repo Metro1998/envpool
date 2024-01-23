@@ -19,7 +19,8 @@ template <typename T>
 using vector = std::vector<T>;
 using ContainerVariant = std::variant<
     vector<int>,
-    vector<float>
+    vector<float>,
+    int
 >;
 
 class RetrieveStrategy {

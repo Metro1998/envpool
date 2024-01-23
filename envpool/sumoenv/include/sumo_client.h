@@ -8,8 +8,10 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <numeric>
 #include <variant>
 #include <vector>
+#include <stdexcept>
 
 #include "envpool/core/async_envpool.h"
 #include "envpool/core/env.h"
@@ -65,6 +67,7 @@ class SumoClient : public Env<SumoEnvSpec> {
   const int max_num_players_;
   const int yellow_time_;
   const int seed_;
+  const int state_dim_;
   const double end_time_;
 
   static const string kMaxDepartDelay;
@@ -81,14 +84,15 @@ class SumoClient : public Env<SumoEnvSpec> {
   void WriteState() {
     // todo
     State state = Allocate(max_num_players_);
-        state["obs:lane_queue_length"_] = context_["lane_queue_length"];
-        state["obs:lane_length"_] = static_cast<float>(context_["lane_length"]);
-        state["obs:vehicle_speed"_] =
-            static_cast<float>(context_["vehicle_speed"]);
-        state["obs:vehicle_position"_] =
-            static_cast<float>(context_["vehicle_position"]);
-        state["obs:vehicle_acceleration"_] =
-            static_cast<float>(context_["vehicle_acceleration"]);
+        state["obs:lane_queue_length"_].Assign(context_["lane_queue_length"].data(), max_num_players_ * state_dim_);
+        state["obs:lane_length"_].Assign(context_["lane_length"].data(), max_num_players_ * state_dim_);
+        state["reward"_].Assign(context_["trafficlight_lane_length"].data(), max_num_players_);
+        // state["obs:vehicle_speed"_] =
+        //     static_cast<float>(context_["vehicle_speed"]);
+        // state["obs:vehicle_position"_] =
+        //     static_cast<float>(context_["vehicle_position"]);
+        // state["obs:vehicle_acceleration"_] =
+        //     static_cast<float>(context_["vehicle_acceleration"]);
         state["info:agent_to_update"_] =
             static_cast<float>(context_["agent_to_update"]);
         state["info:done"_] = static_cast<float>(context_["done"]);
@@ -104,7 +108,8 @@ class SumoClient : public Env<SumoEnvSpec> {
         max_num_players_(spec.config["max_num_players"_]),
         yellow_time_(spec.config["yellow_time"_]),
         seed_(spec.config["seed"_]),
-        end_time_(spec.config["end_time"_]) {
+        end_time_(spec.config["end_time"_]),
+        state_dim_(spec.config["state_dim"_]) {
     SetTrafficLights();
     SetStrategies();
   }

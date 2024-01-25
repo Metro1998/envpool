@@ -6,12 +6,12 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
+#include <numeric>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
-#include <numeric>
 #include <variant>
 #include <vector>
-#include <stdexcept>
 
 #include "envpool/core/async_envpool.h"
 #include "envpool/core/env.h"
@@ -23,15 +23,15 @@ namespace sumoenv {
 class SumoEnvFns {
  public:
   static decltype(auto) DefaultConfig() {
-    return MakeDict("duration_threshold"_.Bind(45),
-                    "path_to_sumo"_.Bind(std::string("/usr/bin/sumo")),
-                    "net_file"_.Bind(std::string("nets/grid.net.xml")),
-                    "route_file"_.Bind(std::string("nets/grid.rou.xml")),
-                    "addition_file"_.Bind(std::string("nets/grid.add.xml")),
-                    "yellow_time"_.Bind(3),
-                    "seed"_.Bind(1),
-                    "end_time"_.Bind(3600.0), // How long does a simulation last.
-                    );
+    return MakeDict(
+        "duration_threshold"_.Bind(45),
+        "path_to_sumo"_.Bind(std::string("/usr/bin/sumo")),
+        "net_file"_.Bind(std::string("nets/grid.net.xml")),
+        "route_file"_.Bind(std::string("nets/grid.rou.xml")),
+        "addition_file"_.Bind(std::string("nets/grid.add.xml")),
+        "yellow_time"_.Bind(3), "seed"_.Bind(1),
+        "end_time"_.Bind(3600.0),  // How long does a simulation last.
+    );
   }
 
   template <typename Config>
@@ -43,60 +43,68 @@ class SumoEnvFns {
         "obs:vehicle_position"_.Bind(Spec<Container<float>>({-1, 8})),
         "obs:vehicle_acceleration"_.Bind(Spec<Container<float>>({-1, 8})),
         "info:agent_to_update"_.Bind(Spec<bool>({-1})),
-        "info:done"_.Bind(Spec<bool>({}))
-    );
+        "info:done"_.Bind(Spec<bool>({})));
   }
 
   template <typename Config>
   static decltype(auto) ActionSpec(const Config& conf) {
     return MakeDict("action:stage"_.Bind(Spec<int>({-1}, {0, 7})),
-                    "action:duration"_.Bind(Spec<int>({-1}, {0, conf["duration_threshold"_] - 1}))
-    );
+                    "action:duration"_.Bind(
+                        Spec<int>({-1}, {0, conf["duration_threshold"_] - 1})));
   }
 };
 
 using SumoEnvSpec = EnvSpec<SumoEnvFns>;
 using Simulation = libsumo::Simulation;
 
+class RetrieveStrategy;
+
 class SumoClient : public Env<SumoEnvSpec> {
  private:
-  const string path_to_sumo_;
-  const string net_file_;
-  const string route_file_;
-  const string additional_file_;
+  const std::string path_to_sumo_;
+  const std::string net_file_;
+  const std::string route_file_;
+  const std::string additional_file_;
   const int max_num_players_;
   const int yellow_time_;
   const int seed_;
   const int state_dim_;
   const double end_time_;
 
-  static const string kMaxDepartDelay;
-  static const string kWaitingTimeMemory;
-  static const string kTimeToTeleport;
-  static const string kNoWarnings;
+  static const std::string kMaxDepartDelay;
+  static const std::string kWaitingTimeMemory;
+  static const std::string kTimeToTeleport;
+  static const std::string kNoWarnings;
 
-  vector<string> sumo_cmd_;
-  vector<std::unique_ptr<TrafficLightImp>> traffic_lights_;
+  std::vector<std::string> sumo_cmd_;
+  std::unordered_map<std::string, std::vector<std::string>> in_lanes_map_;
+    void ProcessLanes();
+    void RemoveElements(std::vector<std::string>& lanes);
+  std::vector<std::unique_ptr<TrafficLightImp>> traffic_lights_;
+  std::unordered_map<std::string, ContainerVariant> context_;
+
   std::unique_ptr<RetrieveStrategy> retrieve_strategy_imp_;
-
-  std::unordered_map<string, ContainerVariant> context_;
+  friend class RetrieveStrategy;
 
   void WriteState() {
     // todo
     State state = Allocate(max_num_players_);
-        state["obs:lane_queue_length"_].Assign(context_["lane_queue_length"].data(), max_num_players_ * state_dim_);
-        state["obs:lane_length"_].Assign(context_["lane_length"].data(), max_num_players_ * state_dim_);
-        state["reward"_].Assign(context_["trafficlight_lane_length"].data(), max_num_players_);
-        // state["obs:vehicle_speed"_] =
-        //     static_cast<float>(context_["vehicle_speed"]);
-        // state["obs:vehicle_position"_] =
-        //     static_cast<float>(context_["vehicle_position"]);
-        // state["obs:vehicle_acceleration"_] =
-        //     static_cast<float>(context_["vehicle_acceleration"]);
-        state["info:agent_to_update"_] =
-            static_cast<float>(context_["agent_to_update"]);
-        state["info:done"_] = static_cast<float>(context_["done"]);
+    state["obs:lane_queue_length"_].Assign(context_["lane_queue_length"].data(),
+                                           max_num_players_ * state_dim_);
+    state["obs:lane_length"_].Assign(context_["lane_length"].data(),
+                                     max_num_players_ * state_dim_);
+    state["reward"_].Assign(context_["trafficlight_lane_length"].data(),
+                            max_num_players_);
+    state["info:agent_to_update"_] =
+        static_cast<float>(context_["agent_to_update"]);
+    state["info:done"_] = static_cast<float>(context_["done"]);
   }
+
+  void Retrieve();  // 这里会有好几层引用传递的问题
+  void SetTrafficLights();
+  void SetStrategies();
+  void ProcessLanes();
+  void RemoveElements(std::vector<std::string>& lanes);
 
  public:
   SumoClient(const Spec& spec, int env_id)
@@ -114,17 +122,10 @@ class SumoClient : public Env<SumoEnvSpec> {
     SetStrategies();
   }
 
-  void Reset();  // todo
-  void SetTrafficLights();
-  void SetStrategies();
-  const std::unordered_map<string, ContainerVariant>&
-  Retrieve();  // 这里会有好几层引用传递的问题
 
+  bool IsDone();                    // todo
+  void Reset();                     // todo
   void Step(const Action& action);  // todo
-  void close();
-  void TempTest();
-
-  bool IsDone();  // todo
 
   // 当这些最基础的东西成熟之后，至少现在有点零乱
   // sumoenv？

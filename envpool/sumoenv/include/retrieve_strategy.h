@@ -1,54 +1,40 @@
 #ifndef RETRIEVE_STRATEGY_H
 #define RETRIEVE_STRATEGY_H
 
-
-#include <string>
-#include <vector>
-#include <variant>
-#include <iostream>
 #include <algorithm>
+#include <iostream>
+#include <string>
 #include <unordered_map>
+#include <variant>
+#include <vector>
 
 #include "libsumo/libsumo.h"
 
 using TrafficLight = libsumo::TrafficLight;
 using Lane = libsumo::Lane;
 using Vehicle = libsumo::Vehicle;
-using string = std::string;
-template <typename T>
-using vector = std::vector<T>;
-using ContainerVariant = std::variant<
-    vector<int>,
-    vector<float>,
-    int
->;
+using ContainerVariant =
+    std::variant<std::vector<int>, std::vector<float>, int>;
 
-class RetrieveStrategy {
-  public:
-    RetrieveStrategy();
-    virtual void Retrieve(std::unordered_map<string, ContainerVariant>& context, size_t max_num_player, size_t state_dim) = 0;
-    virtual ~RetrieveStrategy();
+class SumoClient;
 
-  protected:
-    vector<string> tl_ids_;
-    std::unordered_map<string, vector<string>> in_lanes_map_;
-
-    void ProcessTlsId();
-    void ProcessLanes();
-    void RemoveElements(vector<string>& lanes);
+class RetrieveStrategyInterface {
+ public:
+  virtual ~RetrieveStrategy() = default;
+  virtual Retrieve(
+      int max_num_players, int state_dim,
+      const std::vector<int>& agents_to_update,
+      const std::unordered_map<std::string, std::vector<std::string>>& in_lanes_map,
+      std::unordered_map<std::string, ContainerVariant>& context) = 0;
 };
 
-class RetrieveStrategyImp : public RetrieveStrategy {
-  public:
-    RetrieveStrategyImp() = default;
-    void Retrieve(std::unordered_map<string, ContainerVariant>& context, size_t max_num_players, size_t state_dim) override;
+class RetrieveStrategyImp : public RetrieveStrategyInterface {
+ public:
+  void Retrieve(
+      int max_num_players, int state_dim,
+      const std::vector<int>& agents_to_update,
+      const std::unordered_map<std::string, std::vector<std::string>>& in_lanes_map,
+      std::unordered_map<std::string, ContainerVariant>& context) override;
 };
 
-// class RewardStrategy : public RetrieveStrategy {
-//   public:
-//     RewardStrategy() = default;
-//     void Retrieve(std::unordered_map<string, ContainerVariant>& context) override;
-  
-// };
-
-#endif // RETRIEVE_STRATEGY_H
+#endif  // RETRIEVE_STRATEGY_H

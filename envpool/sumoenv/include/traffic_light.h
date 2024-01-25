@@ -1,10 +1,12 @@
 #ifndef TRAFFIC_LIGHT_H
 #define TRAFFIC_LIGHT_H
 
+#include <libsumo/libsumo.h>
+
 #include <string>
 #include <vector>
 #include <deque>
-#include <libsumo/libsumo.h>
+
 
 class TrafficLightImp
 {

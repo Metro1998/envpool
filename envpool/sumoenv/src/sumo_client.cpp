@@ -50,10 +50,8 @@ const std::unordered_map<string, ContainerVariant>& SumoClient::Retrieve() {
 }
 
 void SumoClient::Reset() {
-  // random seed?
   Simulation::close();
   auto res = Simulation::start(sumo_cmd_);
-  std::cout << res.second << std::endl;
 }
 
 void SumoClient::Step(const Action& action) {
@@ -89,7 +87,8 @@ void SumoClient::Step(const Action& action) {
     }
   }
   // Retrieve information from the traffic lights to update context_
-  retrieve_strategy_imp_->Retrieve(this->context_);
+  retrieve_strategy_imp_->Retrieve(this->context_, max_num_players_,
+                                   state_dim_);
 
   // Use context_["agents_to_update"] to index context_["queue_length"], i.e.,
   // reward
@@ -127,62 +126,37 @@ void SumoClient::Step(const Action& action) {
   return;
 }
 
-void SumoClient::TempTest() {
-  Simulation::step();
-  Simulation::step();
-  double res = Simulation::getEndTime();
-  std::cout << "time:" << Simulation::getTime() << std::endl;
-  std::cout << "cur_time:" << Simulation::getCurrentTime() << std::endl;
-  std::cout << Simulation::getEndTime() << std::endl;
-  // gdb debug
-  // time
-  // reset step close
+bool SumoClient::IsDone() {
+  return Simulation::getTime() >= Simulation::getEndTime();
 }
 
 void SumoClient::WriteState() { State state = Allocate(); }
 
-//  while True:
 
-//             self.sumo.simulationStep()
-//             checks = [tl.check() for tl in self.tls]
-//             [tl.pop() for tl in self.tls]
+void SumoClient::ProcessLanes() {
+    for (const auto& tl_id : TrafficLight::getIDList()) {
+        in_lanes_map_[tl_id] = TrafficLight::getControlledLanes(tl_id);
+        RemoveElements(in_lanes_map_[tl_id]);
+    }
+}
 
-//             self._step += 1
-//             if self._step >= self.max_step_episode:
-//                 self.terminated = True
+void SumoClient::RemoveElements(std::vector<std::string>& lanes) {
+    std::vector<std::string> temp;
 
-//             if -1 in checks or self.terminated:
-//                 self.agents_to_update = -np.array(checks, dtype=np.int64)
-//                 break
+    for (size_t i = 0; i < lanes.size(); ++i) {
+        if (i % 3 == 0) {
+            temp.emplace_back(lanes[i]);
+        }
+    }
+    lanes = std::move(temp);
+    temp.clear();
 
-//         [tl.get_subscription_result() for tl in self.tls]
+    for (size_t i = 0; i < lanes.size(); ++i) {
+        if (i % 3 != 0) {
+            temp.emplace_back(lanes[i]);
+        }
+    }
+    lanes = std::move(temp);
 
-//         if self.observation_pattern == 'queue':
-//             observation = np.array([tl.retrieve_queue() for tl in
-//             self.tls]).flatten()
-//         elif self.observation_pattern == 'pressure':
-//             observation = np.array([tl.retrieve_pressure() for tl in
-//             self.tls]).flatten()
-//         else:
-//             raise NotImplementedError
-
-//         reward = np.array([self.tls[i].retrieve_reward() if
-//         self.agents_to_update[i] else float('inf') for i in
-//         range(self.num_agent)])
-
-//         # global reward is for CTDE architecture e.g., MAPPO
-//         for i in range(self.num_agent):
-//             if self.agents_to_update[i]:
-//                 self.queue_cur[i] = np.array([tl.retrieve_queue() for tl in
-//                 self.tls]).sum() self.global_reward[i] = self.queue_old[i] -
-//                 self.queue_cur[i] self.queue_old[i] = self.queue_cur[i]
-
-//         left_time = np.array([0 if self.agents_to_update[i] == 1 else
-//         tl.retrieve_left_time() for i, tl in enumerate(self.tls)])
-
-//         info = {'agents_to_update': self.agents_to_update, 'terminated':
-//         self.terminated, 'queue': np.array([sum(tl.retrieve_queue()) for tl
-//         in self.tls]).sum(),
-//                 'left_time': left_time, 'global_reward': self.global_reward}
-
-//         return observation, reward, False, False, info
+    return;
+}

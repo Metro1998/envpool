@@ -16,24 +16,25 @@ using Vehicle = libsumo::Vehicle;
 using ContainerVariant =
     std::variant<std::vector<int>, std::vector<float>, int>;
 
-class SumoClient;
-
 class RetrieveStrategyInterface {
  public:
-  virtual ~RetrieveStrategy() = default;
-  virtual Retrieve(
-      int max_num_players, int state_dim,
+  virtual ~RetrieveStrategyInterface() = default;
+  virtual void Retrieve(
+      int max_num_players, int state_dim, int& pre_queue_length,
       const std::vector<int>& agents_to_update,
-      const std::unordered_map<std::string, std::vector<std::string>>& in_lanes_map,
+      const std::unordered_map<std::string, std::vector<std::string>>&
+          in_lanes_map,
       std::unordered_map<std::string, ContainerVariant>& context) = 0;
 };
 
 class RetrieveStrategyImp : public RetrieveStrategyInterface {
  public:
+  ~RetrieveStrategyImp() = default;
   void Retrieve(
-      int max_num_players, int state_dim,
+      int max_num_players, int state_dim, int& pre_queue_length,
       const std::vector<int>& agents_to_update,
-      const std::unordered_map<std::string, std::vector<std::string>>& in_lanes_map,
+      const std::unordered_map<std::string, std::vector<std::string>>&
+          in_lanes_map,
       std::unordered_map<std::string, ContainerVariant>& context) override;
 };
 

@@ -86,42 +86,43 @@ void SumoClient::Step(const Action& action) {
       break;
     }
   }
-  // Retrieve information from the traffic lights to update context_
-  retrieve_strategy_imp_->Retrieve(this->context_, max_num_players_,
-                                   state_dim_);
+  // // Retrieve information from the traffic lights to update context_
+  // retrieve_strategy_imp_->Retrieve(this->context_, max_num_players_,
+  //                                  state_dim_);
 
-  // Use context_["agents_to_update"] to index context_["queue_length"], i.e.,
-  // reward
-  std::vector<int>& agents_to_update = context_["agents_to_update"];
-  std::vector<int>& queue_length = context_["queue_length"];
-  std::vector<int> left_time;
-  left_time.reserve(max_num_players);
+  // // Use context_["agents_to_update"] to index context_["queue_length"], i.e.,
+  // // reward
+  // std::vector<int>& agents_to_update = context_["agents_to_update"];
+  // std::vector<int>& queue_length = context_["queue_length"];
+  // std::vector<int> left_time;
+  // left_time.reserve(max_num_players);
 
-  // Ensure that the lengths of agents_to_update and queue_length are the same
-  if (agents_to_update.size() != queue_length.size()) {
-    throw std::runtime_error("Vector lengths do not match");
-  }
+  // // Ensure that the lengths of agents_to_update and queue_length are the same
+  // if (agents_to_update.size() != queue_length.size()) {
+  //   throw std::runtime_error("Vector lengths do not match");
+  // }
 
-  // Use std::transform to update queue_length
-  std::transform(
-      agents_to_update.begin(), agents_to_update.end(), queue_length.begin(),
-      [](int update, int length) { return update == 1 ? length : 0; });
+  // // Use std::transform to update queue_length
+  // std::transform(
+  //     agents_to_update.begin(), agents_to_update.end(), queue_length.begin(),
+  //     [](int update, int length) { return update == 1 ? length : 0; });
 
-  // Calculate left_time based on the values in agents_to_update
-  std::transform(traffic_lights_.begin(), traffic_lights_.end(),
-                 agents_to_update.begin(), std::back_inserter(left_time),
-                 [](const TrafficLightImp& tl, int update) {
-                   return update == 1 ? 0 : tl.RetrieveLeftTime();
-                 });
-  context_["left_time"] = std::move(left_time);
+  // // Calculate left_time based on the values in agents_to_update
+  // std::transform(traffic_lights_.begin(), traffic_lights_.end(),
+  //                agents_to_update.begin(), std::back_inserter(left_time),
+  //                [](const TrafficLightImp& tl, int update) {
+  //                  return update == 1 ? 0 : tl.RetrieveLeftTime();
+  //                });
+  // context_["left_time"] = std::move(left_time);
 
-  // Calculate the current queue length and update global_reward
-  int cur_queue_length =
-      std::accumulate(traffic_lights_.begin(), traffic_lights_.end(), 0,
-                      [](int sum, const TrafficLightImp& tl) {
-                        return sum + tl->RetrieveReward();
-                      });
-  context_["global_reward"] = last_queue_length - cur_queue_length;
+  // // Calculate the current queue length and update global_reward
+  // int cur_queue_length =
+  //     std::accumulate(traffic_lights_.begin(), traffic_lights_.end(), 0,
+  //                     [](int sum, const TrafficLightImp& tl) {
+  //                       return sum + tl->RetrieveReward();
+  //                     });
+  // context_["global_reward"] = last_queue_length - cur_queue_length;
+  retrieve_strategy_imp_->Retrieve(max_num_players_, state_dim_, pre_queue_length, context["agents_to_update"], in_lanes_map_);
 
   return;
 }

@@ -71,6 +71,8 @@ class SumoClient : public Env<SumoEnvSpec> {
   const int state_dim_;
   const double end_time_;
 
+  int pre_queue_length_;
+
   static const std::string kMaxDepartDelay;
   static const std::string kWaitingTimeMemory;
   static const std::string kTimeToTeleport;
@@ -84,7 +86,7 @@ class SumoClient : public Env<SumoEnvSpec> {
   std::unordered_map<std::string, ContainerVariant> context_;
 
   std::unique_ptr<RetrieveStrategy> retrieve_strategy_imp_;
-  friend class RetrieveStrategy;
+  // friend class RetrieveStrategy;
 
   void WriteState() {
     // todo
@@ -117,7 +119,8 @@ class SumoClient : public Env<SumoEnvSpec> {
         yellow_time_(spec.config["yellow_time"_]),
         seed_(spec.config["seed"_]),
         end_time_(spec.config["end_time"_]),
-        state_dim_(spec.config["state_dim"_]) {
+        state_dim_(spec.config["state_dim"_]),
+        pre_queue_length_(0) {
     SetTrafficLights();
     SetStrategies();
   }

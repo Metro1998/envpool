@@ -15,7 +15,8 @@
 
 #include "envpool/core/async_envpool.h"
 #include "envpool/core/env.h"
-#include "retrieve_strategy.h"
+// #include "retrieve_strategy.h"
+#include "observer.h"
 #include "traffic_light.h"
 
 namespace sumoenv {
@@ -80,12 +81,12 @@ class SumoClient : public Env<SumoEnvSpec> {
 
   std::vector<std::string> sumo_cmd_;
   std::unordered_map<std::string, std::vector<std::string>> in_lanes_map_;
-    void ProcessLanes();
-    void RemoveElements(std::vector<std::string>& lanes);
+  void ProcessLanes();
+  void RemoveElements(std::vector<std::string>& lanes);
   std::vector<std::unique_ptr<TrafficLightImp>> traffic_lights_;
-  std::unordered_map<std::string, ContainerVariant> context_;
-
-  std::unique_ptr<RetrieveStrategy> retrieve_strategy_imp_;
+  std::vector<std::unique_ptr<ObserverInterface>> observers_;
+  // std::unordered_map<std::string, ContainerVariant> context_;
+  // std::unique_ptr<RetrieveStrategy> retrieve_strategy_imp_;
   // friend class RetrieveStrategy;
 
   void WriteState() {
@@ -102,6 +103,20 @@ class SumoClient : public Env<SumoEnvSpec> {
     state["info:done"_] = static_cast<float>(context_["done"]);
   }
 
+  void Attach() {
+    observers_.emplace_back(std::make_unique<StateObserver>());
+    observers_.emplace_back(std::make_unique<RewardObserver>());
+    observers_.emplace_back(std::make_unique<InfoObserver>());
+  }
+
+  void Detach() { observers_.clear(); }
+
+  void Notify(std::vector<int>& agents_to_update) {
+    State state = Allocate(max_num_players_);
+    for (auto& observer : observers_) {
+      observer->Update(state, agents_to_update, max_num_players_, state_dim_);
+    }
+  }
   void Retrieve();  // 这里会有好几层引用传递的问题
   void SetTrafficLights();
   void SetStrategies();
@@ -125,10 +140,34 @@ class SumoClient : public Env<SumoEnvSpec> {
     SetStrategies();
   }
 
+  bool IsDone();  // todo
+  void Reset();   // todo
+  void Step(const Action& action) {
+    for (int i = 0; i < action.size(); ++i) {
+      traffic_lights_[i]->SetStageDuration(action["action:stage"_][i],
+                                           action["action:duration"_][i]);
+    }
+    vector<int> agents_to_update(max_num_players_);
 
-  bool IsDone();                    // todo
-  void Reset();                     // todo
-  void Step(const Action& action);  // todo
+    // Run the simulation until specific conditions are met
+    while (true) {
+      Simulation::step();
+      for (int i = 0; i < max_num_players_; ++i) {
+        agents_to_update[i] = -traffic_lights_[i]->Check();
+        traffic_lights_[i]->Pop();
+      }
+
+      // Condition: at least one agent has finished its [last] stage and ready
+      // to update or the simulation has reached the end time
+      if (std::find(agents_to_update.begin(), agents_to_update.end(), 1) !=
+              agents_to_update.end() ||
+          Simulation::getTime() >= Simulation::getEndTime()) {
+        break;
+      }
+    }
+
+    Notify(agents_to_update); //关注一下变量的时效
+  }
 
   // 当这些最基础的东西成熟之后，至少现在有点零乱
   // sumoenv？

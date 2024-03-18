@@ -19,6 +19,9 @@
 #include "observer.h"
 #include "traffic_light.h"
 
+using ContainerVariant =
+    std::variant<std::vector<int>, std::vector<float>, int>;
+
 namespace sumoenv {
 
 class SumoEnvFns {
@@ -39,11 +42,11 @@ class SumoEnvFns {
   static decltype(auto) StateSpec(const Config& conf) {
     return MakeDict(
         "obs:lane_queue_length"_.Bind(Spec<int>({-1, 8})),
-        "obs:lane_length"_.Bind(Spec<float>({-1, 8})),
-        "obs:vehicle_speed"_.Bind(Spec<Container<float>>({-1, 8})),
-        "obs:vehicle_position"_.Bind(Spec<Container<float>>({-1, 8})),
-        "obs:vehicle_acceleration"_.Bind(Spec<Container<float>>({-1, 8})),
-        "info:agent_to_update"_.Bind(Spec<bool>({-1})),
+        "obs:stage_index"_.Bind(Spec<int>({-1})),
+        "info:global_reward"_.Bind(Spec<float>({})),
+        "info:individual_reward"_.Bind(Spec<float>({-1})),
+        "info:agents_to_update"_.Bind(Spec<bool>({-1})),
+        "info:left_time"_.Bind(Spec<int>({-1})),
         "info:done"_.Bind(Spec<bool>({})));
   }
 
@@ -58,8 +61,6 @@ class SumoEnvFns {
 using SumoEnvSpec = EnvSpec<SumoEnvFns>;
 using Simulation = libsumo::Simulation;
 
-class RetrieveStrategy;
-
 class SumoClient : public Env<SumoEnvSpec> {
  private:
   const std::string path_to_sumo_;
@@ -72,8 +73,6 @@ class SumoClient : public Env<SumoEnvSpec> {
   const int state_dim_;
   const double end_time_;
 
-  int pre_queue_length_;
-
   static const std::string kMaxDepartDelay;
   static const std::string kWaitingTimeMemory;
   static const std::string kTimeToTeleport;
@@ -81,26 +80,52 @@ class SumoClient : public Env<SumoEnvSpec> {
 
   std::vector<std::string> sumo_cmd_;
   std::unordered_map<std::string, std::vector<std::string>> in_lanes_map_;
-  void ProcessLanes();
-  void RemoveElements(std::vector<std::string>& lanes);
   std::vector<std::unique_ptr<TrafficLightImp>> traffic_lights_;
   std::vector<std::unique_ptr<ObserverInterface>> observers_;
-  // std::unordered_map<std::string, ContainerVariant> context_;
-  // std::unique_ptr<RetrieveStrategy> retrieve_strategy_imp_;
-  // friend class RetrieveStrategy;
+  std::unordered_map<std::string, ContainerVariant>
+      context_;  // We use the context_ to store the variables that we're
+                 // interested in, e.g. agent_to_update
+
+  void InitContext() {
+    // State: queue length and stage index
+    context_["lane_queue_length"] =
+        std::vector<int>(max_num_players_ * state_dim_, 0);
+    context_["stage_index"] = std::vector(int)(max_num_players_, 0);
+    // Global reward for CTDE farmework
+    context_["cur_tot_queue_length"] = 0;
+    context_["last_tot_queue_length"] = 0;
+    context_["global_reward"] = 0;
+
+    // Individual reward for decentralized actors
+    context_["cur_tl_queue_length"] = std::vector<int>(max_num_players_, 0);
+    context_["last_tl_queue_length"] = std::vector<int>(max_num_players_, 0);
+    context_["individual_reward"] = std::vector<int>(max_num_players_, 0);
+
+    // Info: agent_to_update, metric(queue_length, waitting_time), left time and
+    // done
+    context_["queue_length"] = 0;
+    context_["waitting_time"] = 0;
+    context_["left_time"] = std::vector<int>(max_num_players_, 0);
+    context_["agents_to_update"] = std::vector<int>(max_num_players_, 1);
+    context_["done"] = 0;
+  }
 
   void WriteState() {
-    // todo
     State state = Allocate(max_num_players_);
     state["obs:lane_queue_length"_].Assign(context_["lane_queue_length"].data(),
                                            max_num_players_ * state_dim_);
-    state["obs:lane_length"_].Assign(context_["lane_length"].data(),
-                                     max_num_players_ * state_dim_);
-    state["reward"_].Assign(context_["trafficlight_lane_length"].data(),
-                            max_num_players_);
-    state["info:agent_to_update"_] =
+    state["obs:stage_index"_].Assign(context_["stage_index"].data(),
+                                      max_num_players_);
+    
+    state["info:global_reward"_] = static_cast<float>(context_["global_reward"]);
+    state["info:individual_reward"_].Assign(
+        context_["individual_reward"].data(), max_num_players_);
+    state["info:agents_to_update"_] =
         static_cast<float>(context_["agent_to_update"]);
+    state["info:left_time"_].Assign(context_["left_time"].data(),
+                                    max_num_players_);
     state["info:done"_] = static_cast<float>(context_["done"]);
+
   }
 
   void Attach() {
@@ -111,17 +136,49 @@ class SumoClient : public Env<SumoEnvSpec> {
 
   void Detach() { observers_.clear(); }
 
-  void Notify(std::vector<int>& agents_to_update) {
+  void Notify() {
     State state = Allocate(max_num_players_);
     for (auto& observer : observers_) {
-      observer->Update(state, agents_to_update, max_num_players_, state_dim_);
+      observer->Update(context_, traffic_lights_, max_num_players_, state_dim_);
     }
   }
-  void Retrieve();  // 这里会有好几层引用传递的问题
-  void SetTrafficLights();
-  void SetStrategies();
-  void ProcessLanes();
-  void RemoveElements(std::vector<std::string>& lanes);
+
+  void SetTrafficLights() {
+    vector<std::string> tls_ids = TrafficLight::getIDList();
+    std::for_each(tls_ids.begin(), tls_ids.end(), [this](const string& id) {
+      traffic_lights_.emplace_back(
+          std::make_unique<TrafficLightImp>(id, yellow_time_));
+    });
+  }
+
+  void RemoveElements(std::vector<std::string>& lanes) {
+    std::vector<std::string> temp;
+
+    for (size_t i = 0; i < lanes.size(); ++i) {
+      if (i % 3 == 0) {
+        temp.emplace_back(lanes[i]);
+      }
+    }
+    lanes = std::move(temp);
+    temp.clear();
+
+    for (size_t i = 0; i < lanes.size(); ++i) {
+      if (i % 3 != 0) {
+        temp.emplace_back(lanes[i]);
+      }
+    }
+    lanes = std::move(temp);
+
+    return;
+  }
+
+  void ProcessLanes() {
+    for (const auto& tl_id : TrafficLight::getIDList()) {
+      in_lanes_map_[tl_id] = TrafficLight::getControlledLanes(tl_id);
+      RemoveElements(in_lanes_map_[tl_id]);
+    }
+    return;
+  }
 
  public:
   SumoClient(const Spec& spec, int env_id)
@@ -137,28 +194,35 @@ class SumoClient : public Env<SumoEnvSpec> {
         state_dim_(spec.config["state_dim"_]),
         pre_queue_length_(0) {
     SetTrafficLights();
-    SetStrategies();
   }
 
-  bool IsDone();  // todo
-  void Reset();   // todo
-  void Step(const Action& action) {
+  bool IsDone() override {
+    return Simulation::getTime() >= Simulation::getEndTime();
+  }
+  void Reset() override {
+    Simulation::close();
+    auto res = Simulation::start(sumo_cmd_);
+    context_["done"] = 0;
+    Notify();
+  }
+  void Step(const Action& action) override{
     for (int i = 0; i < action.size(); ++i) {
-      traffic_lights_[i]->SetStageDuration(action["action:stage"_][i],
-                                           action["action:duration"_][i]);
+      if (context_["agent_to_update"][i] == 1) {
+        traffic_lights_[i]->SetStageDuration(action["action:stage"_][i],
+                                             action["action:duration"_][i]);
+      }
     }
-    vector<int> agents_to_update(max_num_players_);
 
     // Run the simulation until specific conditions are met
     while (true) {
       Simulation::step();
       for (int i = 0; i < max_num_players_; ++i) {
-        agents_to_update[i] = -traffic_lights_[i]->Check();
+        context_["agent_to_update"][i] = -traffic_lights_[i]->Check();
         traffic_lights_[i]->Pop();
       }
 
-      // Condition: at least one agent has finished its [last] stage and ready
-      // to update or the simulation has reached the end time
+      // Condition: at least one agent has finished its signal stage and ready
+      // to update the signal stage or the simulation has reached the end time
       if (std::find(agents_to_update.begin(), agents_to_update.end(), 1) !=
               agents_to_update.end() ||
           Simulation::getTime() >= Simulation::getEndTime()) {
@@ -166,11 +230,10 @@ class SumoClient : public Env<SumoEnvSpec> {
       }
     }
 
-    Notify(agents_to_update); //关注一下变量的时效
+    // Inform the observers to update the state, reward and info through the context
+    Notify();
+    return;
   }
-
-  // 当这些最基础的东西成熟之后，至少现在有点零乱
-  // sumoenv？
 };
 
 };  // namespace sumoenv

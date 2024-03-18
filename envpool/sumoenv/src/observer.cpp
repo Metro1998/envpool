@@ -1,20 +1,19 @@
 #include "observer.h"
+#include "traffic_light.h"
 
 #include <algorithm>
 
 #include "libsumo/libsumo.h"
 
-void StateObserver::Update(State& context, std::vector<int>& agents_to_update,
-                           int max_num_players, int state_dim) {
+void StateObserver::Update(ContainerVariant& context, std::vector<std::unique_ptr<TrafficLightImp>>& traffic_lights, int max_num_players, int state_dim) {
   std::vector<int> lane_queue_length(max_num_players * state_dim);
-  std::vector<int> lane_queue_length_diff(max_num_players * state_dim);
   std::vector<int> stage_index(max_num_players);
 
   size_t tl_idx = 0;
-  for (std::string& tl_id : TrafficLight::getIDList()) {
+  for (const std::string& tl_id : TrafficLight::getIDList()) {
     const auto& lanes = in_lanes_map[tl_id];
 
-    stage_index[tl_idx] = TrafficLight::getStageIndex(tl_id);
+    stage_index[tl_idx] = TrafficLight::getStageIndex(tl_id); #TODO
 
     size_t lane_idx = 0;
     for (const std::string& lane_id : lanes) {
@@ -26,58 +25,85 @@ void StateObserver::Update(State& context, std::vector<int>& agents_to_update,
     ++tl_idx;
   }
 
-  if (context.find("lane_queue_length") == context.end()) {
-    std::transform(lane_queue_length.begin(), lane_queue_length.end(),
-                   lane_queue_length_diff.begin(),
-                   [](int length) { return ~length; });
-  } else {
-    std::transform(
-        lane_queue_length.begin(), lane_queue_length.end(),
-        std::get<std::vector<int>>(context["lane_queue_length"]).begin(),
-        lane_queue_length_diff.begin(),
-        [](int cur_queue, int pre_queue) { return pre_queue - cur_queue; });
-  }
-
   context["lane_queue_length"] = std::move(lane_queue_length);
-  context["lane_queue_length_diff"] = std::move(lane_queue_length_diff);
   context["stage_index"] = std::move(stage_index);
 }
 
-void RewardObserver::Update(State& context, std::vector<int>& agents_to_update,
-                            int max_num_players, int state_dim) {
-  std::vector<int> lane_queue_length_diff(max_num_players * state_dim);
+void RewardObserver::Update(ContainerVariant& context, std::vector<std::unique_ptr<TrafficLightImp>>& traffic_lights, int max_num_players, int state_dim) {
+  std::vector<int> lane_queue_length(max_num_players * state_dim);
 
   size_t tl_idx = 0;
-  for (std::string& tl_id : TrafficLight::getIDList()) {
+  for (const std::string& tl_id : TrafficLight::getIDList()) {
     const auto& lanes = in_lanes_map[tl_id];
 
-    stage_index[tl_idx] = TrafficLight::getStageIndex(tl_id);
-
     size_t lane_idx = 0;
-    int tl_queue_length = 0;
     for (const std::string& lane_id : lanes) {
       lane_queue_length[tl_idx * state_dim + lane_idx;] =
           Lane::getLastStepHaltingNumber(lane_id);
-      tl_queue_length += Lane::getLastStepHaltingNumber(lane_id);
 
       ++lane_idx;
     }
     ++tl_idx;
   }
 
-  std::transform(
-      lane_queue_length.begin(), lane_queue_length.end(),
-      std::get<std::vector<int>>(context["lane_queue_length"]).begin(),
-      lane_queue_length_diff.begin(),
-      [](int cur_queue, int pre_queue) { return pre_queue - cur_queue; });
+  // Global reward for CTDE farmework
+  int cur_tot_queue_length = std::accumulate(lane_queue_length.begin(), lane_queue_length.end(), 0);
+  context["last_tot_queue_length"] = context["cur_tot_queue_length"];
+  context["cur_tot_queue_length"] = cur_tot_queue_length;
+  context["global_reward"] = context["last_tot_queue_length"] - context["cur_tot_queue_length"];
 
-  context["lane_queue_length"] = std::move(lane_queue_length);
-  std::transform(agents_to_update.begin(), agents_to_update.end(),
-                 lane_queue_length_diff.begin(), [](int update, int length) {
-                   return update == 1 ? length : 0;
-                 });
+  // Individual reward for decentralized actors
+  std::vector<int> tl_queue_length;
+  for (int i = 0; i < max_num_players; ++i){
+    size_t start_idx = i * state_dim;
+    size_t end_idx = (i + 1) * state_dim;
 
-  int cur_queue_length = std::accumulate(trafficlight_queue_length.begin(),
-                                         trafficlight_queue_length.end(), 0);
-  context["global_reward"] = last_queue_length - cur_queue_length;
+    int sum = std::accumulate(lane_queue_length.begin() + start_idx, lane_queue_length.end() + end_idx, 0);
+    tl_queue_length.push_back(sum);
+  }
+
+  context["last_tl_queue_length"] =  context["cur_tl_queue_length"];
+  context["cur_tl_queue_length"] = tl_queue_length;
+  for (const auto update: context["agents_to_update"]){
+    if (update) {
+      context["individual_reward"] = context["last_tl_queue_length"] - context["cur_tl_queue_length"];
+    } else {
+      context["individual_reward"] = 0;
+    }
+  }
+
+  return;
+}
+
+
+void InfoObserver::Update(ContainerVariant& context, std::vector<std::unique_ptr<TrafficLightImp>>& traffic_lights, int max_num_players, int state_dim) {
+  std::vector<int> lane_queue_length(max_num_players * state_dim);
+  std::vector<int> lane_waitting_time(max_num_players * state_dim);
+  std::vector<int> left_time(max_num_players);
+
+  size_t tl_idx = 0;
+  for (const auto& tl : traffic_lights) {
+    left_time[tl_idx] = tl->RetrieveLeftTime();
+    tl_idx++;
+  }
+
+  size_t tl_idx = 0;
+  for (const std::string& tl_id : TrafficLight::getIDList()) {
+    const auto& lanes = in_lanes_map[tl_id];
+
+    size_t lane_idx = 0;
+    for (const std::string& lane_id : lanes) {
+      lane_queue_length[tl_idx * state_dim + lane_idx;] =
+          Lane::getLastStepHaltingNumber(lane_id);
+      lane_waitting_time[tl_idx * state_dim + lane_idx;] =
+          Lane::getLastStepWaitingTime(lane_id);
+
+      ++lane_idx;
+    }
+    ++tl_idx;
+  }
+
+  context["queue_length"] = std::accumulate(lane_queue_length.begin(), lane_queue_length.end(), 0);
+  context["waitting_time"] = std::accumulate(lane_waitting_time.begin(), lane_waitting_time.end(), 0);
+  context["left_time"] = std::move(left_time);
 }

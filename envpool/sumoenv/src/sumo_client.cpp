@@ -27,7 +27,6 @@ SumoClient::SumoClient(const string& path_to_sumo, const string& net,
                  std::to_string(end_time)}) {
   auto res = Simulation::start(sumo_cmd_);
   SetTrafficLights();
-  SetStrategies();
 }
 
 void SumoClient::SetTrafficLights() {
@@ -38,16 +37,13 @@ void SumoClient::SetTrafficLights() {
   });
 }
 
-void SumoClient::SetStrategies() {
-  retrieve_strategy_imp_ = std::make_unique<RetrieveStrategyImp>();
-}
 
-const std::unordered_map<string, ContainerVariant>& SumoClient::Retrieve() {
-  retrieve_strategy_imp_->Retrieve(this->context_,
-                                   static_cast<size_t>(max_num_players_),
-                                   static_cast<size_t>(state_dim_));
-  return context_;
-}
+// const std::unordered_map<string, ContainerVariant>& SumoClient::Retrieve() {
+//   retrieve_strategy_imp_->Retrieve(this->context_,
+//                                    static_cast<size_t>(max_num_players_),
+//                                    static_cast<size_t>(state_dim_));
+//   return context_;
+// }
 
 void SumoClient::Reset() {
   Simulation::close();
@@ -62,6 +58,7 @@ void SumoClient::Step(const Action& action) {
   }
 
   // Calculate and accumulate the current queue length as a reward
+  // TODO
   int last_queue_length =
       std::accumulate(traffic_lights_.begin(), traffic_lights_.end(), 0,
                       [](int sum, const TrafficLightImp& tl) {
@@ -90,15 +87,16 @@ void SumoClient::Step(const Action& action) {
   // retrieve_strategy_imp_->Retrieve(this->context_, max_num_players_,
   //                                  state_dim_);
 
-  // // Use context_["agents_to_update"] to index context_["queue_length"], i.e.,
+  // // Use context_["agents_to_update"] to index context_["queue_length"],
+  // i.e.,
   // // reward
   // std::vector<int>& agents_to_update = context_["agents_to_update"];
   // std::vector<int>& queue_length = context_["queue_length"];
   // std::vector<int> left_time;
   // left_time.reserve(max_num_players);
 
-  // // Ensure that the lengths of agents_to_update and queue_length are the same
-  // if (agents_to_update.size() != queue_length.size()) {
+  // // Ensure that the lengths of agents_to_update and queue_length are the
+  // same if (agents_to_update.size() != queue_length.size()) {
   //   throw std::runtime_error("Vector lengths do not match");
   // }
 
@@ -122,7 +120,9 @@ void SumoClient::Step(const Action& action) {
   //                       return sum + tl->RetrieveReward();
   //                     });
   // context_["global_reward"] = last_queue_length - cur_queue_length;
-  retrieve_strategy_imp_->Retrieve(max_num_players_, state_dim_, pre_queue_length, context["agents_to_update"], in_lanes_map_);
+  retrieve_strategy_imp_->Retrieve(max_num_players_, state_dim_,
+                                   pre_queue_length,
+                                   context["agents_to_update"], in_lanes_map_);
 
   return;
 }
@@ -133,31 +133,30 @@ bool SumoClient::IsDone() {
 
 void SumoClient::WriteState() { State state = Allocate(); }
 
-
 void SumoClient::ProcessLanes() {
-    for (const auto& tl_id : TrafficLight::getIDList()) {
-        in_lanes_map_[tl_id] = TrafficLight::getControlledLanes(tl_id);
-        RemoveElements(in_lanes_map_[tl_id]);
-    }
+  for (const auto& tl_id : TrafficLight::getIDList()) {
+    in_lanes_map_[tl_id] = TrafficLight::getControlledLanes(tl_id);
+    RemoveElements(in_lanes_map_[tl_id]);
+  }
 }
 
 void SumoClient::RemoveElements(std::vector<std::string>& lanes) {
-    std::vector<std::string> temp;
+  std::vector<std::string> temp;
 
-    for (size_t i = 0; i < lanes.size(); ++i) {
-        if (i % 3 == 0) {
-            temp.emplace_back(lanes[i]);
-        }
+  for (size_t i = 0; i < lanes.size(); ++i) {
+    if (i % 3 == 0) {
+      temp.emplace_back(lanes[i]);
     }
-    lanes = std::move(temp);
-    temp.clear();
+  }
+  lanes = std::move(temp);
+  temp.clear();
 
-    for (size_t i = 0; i < lanes.size(); ++i) {
-        if (i % 3 != 0) {
-            temp.emplace_back(lanes[i]);
-        }
+  for (size_t i = 0; i < lanes.size(); ++i) {
+    if (i % 3 != 0) {
+      temp.emplace_back(lanes[i]);
     }
-    lanes = std::move(temp);
+  }
+  lanes = std::move(temp);
 
-    return;
+  return;
 }

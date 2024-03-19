@@ -12,8 +12,6 @@ int main() {
         3600.0
     );
     
-    sumo_client_.Retrieve();
-    sumo_client_.TempTest();
     
     // sumo_client_.RetrieveReward();
 

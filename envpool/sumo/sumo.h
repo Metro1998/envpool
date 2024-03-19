@@ -13,15 +13,15 @@
 #include <variant>
 #include <vector>
 
-#include "core/async_envpool.h"
-#include "core/env.h"
+#include "envpool/core/async_envpool.h"
+#include "envpool/core/env.h"
 #include "observer.h"
 #include "traffic_light.h"
 
 using ContainerVariant =
     std::variant<std::vector<int>, std::vector<float>, int>;
 
-namespace sumoenv {
+namespace sumo {
 
 class SumoEnvFns {
  public:
@@ -29,9 +29,9 @@ class SumoEnvFns {
     return MakeDict(
         "duration_threshold"_.Bind(45),
         "path_to_sumo"_.Bind(std::string("/usr/bin/sumo")),
-        "net_file"_.Bind(std::string("nets/grid.net.xml")),
-        "route_file"_.Bind(std::string("nets/grid.rou.xml")),
-        "addition_file"_.Bind(std::string("nets/grid.add.xml")),
+        "net_file"_.Bind(std::string("def/4_4.net.xml")),
+        "route_file"_.Bind(std::string("def/4_4.rou.xml")),
+        "addition_file"_.Bind(std::string("def/4_4.add.xml")),
         "yellow_time"_.Bind(3), "seed"_.Bind(1),
         "end_time"_.Bind(3600.0),  // How long does a simulation last.
     );
@@ -60,7 +60,7 @@ class SumoEnvFns {
 using SumoEnvSpec = EnvSpec<SumoEnvFns>;
 using Simulation = libsumo::Simulation;
 
-class SumoClient : public Env<SumoEnvSpec> {
+class Sumo : public Env<SumoEnvSpec> {
  private:
   const std::string path_to_sumo_;
   const std::string net_file_;
@@ -119,8 +119,7 @@ class SumoClient : public Env<SumoEnvSpec> {
     state["info:global_reward"_] = static_cast<float>(context_["global_reward"]);
     state["info:individual_reward"_].Assign(
         context_["individual_reward"].data(), max_num_players_);
-    state["info:agents_to_update"_] =
-        static_cast<float>(context_["agent_to_update"]);
+    state["info:agents_to_update"_] = Assign(context_["agents_to_update"].data(), max_num_players_);
     state["info:left_time"_].Assign(context_["left_time"].data(),
                                     max_num_players_);
     state["info:done"_] = static_cast<float>(context_["done"]);
@@ -180,18 +179,17 @@ class SumoClient : public Env<SumoEnvSpec> {
   }
 
  public:
-  SumoClient(const Spec& spec, int env_id)
+  Sumo(const Spec& spec, int env_id)
       : Env<SumoEnvSpec>(spec, env_id),
         path_to_sumo_(spec.config["path_to_sumo"_]),
-        net_file_(spec.config["net_file"_]),
+        net_file_(spec.config["net_file"_])
         route_file_(spec.config["route_file"_]),
         additional_file_(spec.config["addition_file"_]),
         max_num_players_(spec.config["max_num_players"_]),
         yellow_time_(spec.config["yellow_time"_]),
         seed_(spec.config["seed"_]),
         end_time_(spec.config["end_time"_]),
-        state_dim_(spec.config["state_dim"_]),
-        pre_queue_length_(0) {
+        state_dim_(spec.config["state_dim"_]){
     SetTrafficLights();
   }
 
@@ -235,6 +233,8 @@ class SumoClient : public Env<SumoEnvSpec> {
   }
 };
 
-};  // namespace sumoenv
+using SumoEnvPool = AsyncEnvPool<SumoClient>;
+
+}  // namespace sumoenv
 
 #endif  // SUMOCLIENT_H

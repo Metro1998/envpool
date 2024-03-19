@@ -52,3 +52,9 @@ try:
   import envpool.vizdoom.registration  # noqa: F401
 except ImportError:
   pass
+
+try:
+  import envpool.sumo.registration  # noqa: F401
+except ImportError:
+  pass
+

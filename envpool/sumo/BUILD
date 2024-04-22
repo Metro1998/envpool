@@ -17,6 +17,16 @@ load("@pybind11_bazel//:build_defs.bzl", "pybind_extension")
 
 package(default_visibility = ["//visibility:public"])
 
+
+
+cc_library(
+    name = "traffic_light",
+    srcs = ["traffic_light.cpp"],
+    hdrs = ["traffic_light.h"],
+    deps = ["//third_party:libsumo"],
+)
+
+
 cc_library(
     name = "sumo_env",
     hdrs = [
